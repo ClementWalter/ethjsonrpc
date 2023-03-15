@@ -1,12 +1,15 @@
+import os
 from typing import List, Optional, Union
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from ethjsonrpc.client import Client
+from ethjsonrpc.eth_client import EthClient
 
+load_dotenv()
 app = FastAPI()
-client = Client()
+client = EthClient.new(os.environ["GATEWAY_CLIENT"])
 
 
 class Payload(BaseModel):

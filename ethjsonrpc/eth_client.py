@@ -1,4 +1,17 @@
-class Client:
+from dataclasses import dataclass
+
+from starknet_py.net.gateway_client import GatewayClient
+
+
+@dataclass
+class EthClient:
+
+    starknet_gateway: GatewayClient
+
+    @staticmethod
+    def new(starknet_gateway_url: str):
+        return EthClient(GatewayClient(net=starknet_gateway_url))
+
     async def web3_clientVersion(self, *args) -> str:
         return f"web3_clientVersion called with {args}"
 
