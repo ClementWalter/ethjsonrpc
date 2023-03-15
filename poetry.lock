@@ -1548,19 +1548,15 @@ test = ["argcomplete (>=2.0)", "pre-commit", "pytest", "pytest-mock"]
 
 [[package]]
 name = "typeguard"
-version = "3.0.0"
+version = "2.13.0"
 description = "Run-time type checker for Python"
 category = "main"
 optional = false
-python-versions = ">=3.7.4"
-
-[package.dependencies]
-importlib-metadata = {version = ">=3.6", markers = "python_version < \"3.10\""}
-typing-extensions = {version = ">=4.4.0", markers = "python_version < \"3.11\""}
+python-versions = ">=3.5.3"
 
 [package.extras]
-doc = ["packaging", "sphinx-autodoc-typehints (>=1.2.0)", "sphinx-rtd-theme"]
-test = ["mypy (>=0.991)", "pytest"]
+doc = ["sphinx-autodoc-typehints (>=1.2.0)", "sphinx-rtd-theme"]
+test = ["mypy", "pytest", "typing-extensions"]
 
 [[package]]
 name = "typing-extensions"
@@ -1684,7 +1680,7 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.10"
-content-hash = "e16be3d1c824d5bc3953b81da713caefbef082ab0afe37d4da54d22ddeef2b56"
+content-hash = "064c33efa3b677fdbf3dba90e86cc885c7b489e3f76d0b62670c18991701e52f"
 
 [metadata.files]
 aiohttp = [
@@ -3236,8 +3232,8 @@ traitlets = [
     {file = "traitlets-5.9.0.tar.gz", hash = "sha256:f6cde21a9c68cf756af02035f72d5a723bf607e862e7be33ece505abf4a3bad9"},
 ]
 typeguard = [
-    {file = "typeguard-3.0.0-py3-none-any.whl", hash = "sha256:f595ad0c7dab4d7cb7158ddb46c392f17200a1f6f7ce340068ba2417661de31a"},
-    {file = "typeguard-3.0.0.tar.gz", hash = "sha256:91d86faa19b750515edab2d5fc9e4167dedd45b420e1696cd5d5e42f06d6bc02"},
+    {file = "typeguard-2.13.0-py3-none-any.whl", hash = "sha256:0bc44d1ff865b522eda969627868b0e001c8329296ce50aededbea03febc79ee"},
+    {file = "typeguard-2.13.0.tar.gz", hash = "sha256:04e38f92eb59410c9375d3be23df65e0a7643f2e8bcbd421423d808d2f9e99df"},
 ]
 typing-extensions = [
     {file = "typing_extensions-4.5.0-py3-none-any.whl", hash = "sha256:fb33085c39dd998ac16d1431ebc293a8b3eedd00fd4a32de0ff79002c19511b4"},
