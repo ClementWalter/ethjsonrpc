@@ -2,6 +2,8 @@ from dataclasses import dataclass
 
 from starknet_py.net.gateway_client import GatewayClient
 
+from ethjsonrpc.constants import CHAIN_ID
+
 
 @dataclass
 class EthClient:
@@ -47,6 +49,9 @@ class EthClient:
 
     async def eth_accounts(self, *args) -> str:
         return f"eth_accounts called with {args}"
+
+    async def eth_chainId(self, *args) -> str:
+        return f"0x{CHAIN_ID:x}"
 
     async def eth_blockNumber(self, *args) -> str:
         return f"eth_blockNumber called with {args}"

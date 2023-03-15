@@ -22,7 +22,7 @@ class Payload(BaseModel):
 class Result(BaseModel):
     id: int
     jsonrpc: str
-    result: Union[dict, List[str], str]
+    result: Union[dict, List[str], str, int]
 
 
 @app.post("/")
