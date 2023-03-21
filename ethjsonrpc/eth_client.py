@@ -175,17 +175,31 @@ class EthClient:
         tx = HexBytes(raw_tx)
         is_legacy = self.is_legacy_tx(tx)
         if is_legacy:
-            sender = LondonLegacyTransaction.decode(tx).get_sender().hex()
+            decoded_tx = LondonLegacyTransaction.decode(tx)
         else:
-            sender = LondonTypedTransaction.decode(tx).get_sender().hex()
-        eoa = await self.get_eoa(f"0x{sender}")
+            decoded_tx = LondonTypedTransaction.decode(tx)
+        sender = decoded_tx.get_sender().hex()
+        try:
+            # TODO: remove when kakarot allows for sending ETH to an non-deployed EOA
+            to = decoded_tx.to.hex()
+            await self.get_eoa(to)
+        except:
+            pass
+        eoa = await self.get_eoa(sender)
         call = Call(
             to_addr=0xDEAD,
             selector=0xDEAD,
             calldata=list(tx),
         )
         receipt = await eoa.execute(call, max_fee=int(1e18))
-        return f"0x{receipt.transaction_hash:064x}"
+        receipt = await self.starknet_gateway.get_transaction_receipt(
+            receipt.transaction_hash
+        )
+        if receipt.status == TransactionStatus.REJECTED:
+            raise ValueError(
+                f"Tx {hex(receipt.hash)} rejected with reason {receipt.rejection_reason}"
+            )
+        return f"0x{receipt.hash:064x}"
 
     async def eth_call(self, tx, block_number) -> str:
         if "to" not in tx:
