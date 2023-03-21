@@ -229,8 +229,7 @@ class EthClient:
             )
             sender = hex((await self.starknet_gateway.call_contract(call))[0])
         except TransactionNotReceivedError:
-            sender = f"0x{0:040}"
-            pass
+            return
         return {
             "transactionHash": tx_hash,
             "blockHash": hex(receipt.block_hash or 0),

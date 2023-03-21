@@ -80,7 +80,7 @@ class Payload(BaseModel):
 class Result(BaseModel):
     id: Union[int, str]
     jsonrpc: str
-    result: Union[dict, List[str], str, int]
+    result: Optional[Union[dict, List[str], str, int]]
 
 
 @app.post("/")
