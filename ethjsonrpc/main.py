@@ -5,6 +5,7 @@ from typing import List, Optional, Union
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware import Middleware
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.concurrency import iterate_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -31,16 +32,35 @@ class RequestContextLogMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         await self.set_body(request)
-        body = await request.json()
-        logger.debug(f"RPC request:\n\t{body}")
+
+        try:
+            body = await request.json()
+            logger.debug(f"RPC request:\n\t{body}")
+        except:
+            logger.warning("Cannot parse request")
+
         response = await call_next(request)
-        response_body = [chunk async for chunk in response.body_iterator]
-        response.body_iterator = iterate_in_threadpool(iter(response_body))
-        logger.debug(f"RPC response:\n\t{json.loads(response_body[0].decode())}")
+
+        try:
+            response_body = [chunk async for chunk in response.body_iterator]
+            response.body_iterator = iterate_in_threadpool(iter(response_body))
+            logger.debug(f"RPC response:\n\t{json.loads(response_body[0].decode())}")
+        except:
+            logger.warning("Cannot parse response")
+
         return response
 
 
-middleware = [Middleware(RequestContextLogMiddleware)]
+middleware = [
+    Middleware(RequestContextLogMiddleware),
+    Middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    ),
+]
 app = FastAPI(middleware=middleware)
 
 
@@ -54,11 +74,11 @@ class Payload(BaseModel):
     jsonrpc: str
     method: str
     params: Optional[list]
-    id: int
+    id: Union[int, str]
 
 
 class Result(BaseModel):
-    id: int
+    id: Union[int, str]
     jsonrpc: str
     result: Union[dict, List[str], str, int]
 
@@ -72,3 +92,8 @@ async def main(payload: Payload) -> Result:
         jsonrpc=payload.jsonrpc,
         result=await getattr(eth_client, payload.method)(*(payload.params or [])),
     )
+
+
+@app.options("/")
+async def options(*args, **kwargs):
+    return
