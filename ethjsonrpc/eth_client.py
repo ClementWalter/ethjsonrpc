@@ -9,6 +9,7 @@ from eth.vm.forks.london.transactions import (
 from hexbytes import HexBytes
 from starknet_py.contract import Contract
 from starknet_py.net import AccountClient
+from starknet_py.net.account.account import _execute_payload_serializer
 from starknet_py.net.client_errors import ContractNotFoundError
 from starknet_py.net.client_models import Call, Tag, TransactionStatus
 from starknet_py.net.gateway_client import GatewayClient
@@ -241,28 +242,27 @@ class EthClient:
         return self.starknet_block_to_eth_block(block, transactions)
 
     async def eth_getTransactionReceipt(self, tx_hash):
-        try:
-            tx = await self.starknet_gateway.get_transaction(tx_hash)
-            call = Call(
-                to_addr=tx.contract_address,
-                selector=get_selector_from_name("get_evm_address"),
-                calldata=[],
-            )
-            sender = hex((await self.starknet_gateway.call_contract(call))[0])
-        except:
-            return
+        starknet_tx = await self.starknet_gateway.get_transaction(tx_hash)
+        tx = bytes(
+            _execute_payload_serializer.deserialize(starknet_tx.calldata).calldata
+        )
+        is_legacy = self.is_legacy_tx(tx)
+        if is_legacy:
+            decoded_tx = LondonLegacyTransaction.decode(tx)
+        else:
+            decoded_tx = LondonTypedTransaction.decode(tx)
         receipt = await self.starknet_gateway.get_transaction_receipt(tx_hash)
         return {
             "transactionHash": tx_hash,
             "blockHash": hex(receipt.block_hash or 0),
             "blockNumber": hex(receipt.block_number or 0),
-            "logs": [],
             "contractAddress": None,
             "effectiveGasPrice": receipt.actual_fee,
-            "cumulativeGasUsed": "0xbe8cde",
-            "from": sender,
-            "gasUsed": "0x565f",
-            "logsBloom": "0x00000000000000000000000000000000000100004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000",
+            "cumulativeGasUsed": hex(21_000),
+            "from": "0x" + decoded_tx.get_sender().hex(),
+            "gasUsed": hex(21_000),
+            "logs": [],
+            "logsBloom": f"0x{0:0512}",
             "status": hex(
                 int(
                     receipt.status
@@ -273,9 +273,9 @@ class EthClient:
                     ]
                 )
             ),
-            "to": None,
+            "to": "0x" + decoded_tx.to.hex(),
             "transactionIndex": "0x1",
-            "type": "0x2",
+            "type": f"0x{0 if is_legacy else tx[0]}",
         }
 
     async def eth_getCode(self, evm_address, block_number):
