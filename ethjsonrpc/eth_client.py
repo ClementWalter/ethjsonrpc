@@ -2,14 +2,16 @@ import logging
 from dataclasses import dataclass
 from typing import List, Union
 
-from eth.vm.forks.london.transactions import LondonTypedTransaction
+from eth.vm.forks.london.transactions import (
+    LondonLegacyTransaction,
+    LondonTypedTransaction,
+)
 from hexbytes import HexBytes
 from starknet_py.contract import Contract
 from starknet_py.net import AccountClient
 from starknet_py.net.client_errors import ContractNotFoundError
 from starknet_py.net.client_models import Call, Tag, TransactionStatus
 from starknet_py.net.gateway_client import GatewayClient
-from starknet_py.transaction_exceptions import TransactionNotReceivedError
 from starkware.starknet.public.abi import get_selector_from_name
 
 from ethjsonrpc.constants import (
@@ -126,12 +128,14 @@ class EthClient:
         block = await self.starknet_gateway.get_block(
             block_number=self.get_block_number(block_number)
         )
-        block_count = int(block_count, 16)
+        block_count_int = int(block_count, 16)
         return {
-            "oldestBlock": hex(block.block_number - block_count),
-            "reward": [[hex(int(1e7))] * len(percentiles) for _ in range(block_count)],
+            "oldestBlock": hex(block.block_number - block_count_int),
+            "reward": [
+                [hex(int(1e7))] * len(percentiles) for _ in range(block_count_int)
+            ],
             "baseFeePerGas": [hex(int(1e9))] * (block.block_number + 1),
-            "gasUsedRatio": [0.5] * block_count,
+            "gasUsedRatio": [0.5] * block_count_int,
         }
 
     async def eth_blockNumber(self) -> str:
@@ -143,7 +147,9 @@ class EthClient:
         starknet_address = await self.compute_starknet_address(evm_address)
 
         block_hash = (
-            await self.starknet_gateway.get_block(block_number=int(block_number, 16))
+            await self.starknet_gateway.get_block(
+                block_number=self.get_block_number(block_number)
+            )
         ).block_hash
         return hex(
             (
@@ -155,12 +161,10 @@ class EthClient:
 
     async def eth_getTransactionCount(self, evm_address, block_number) -> str:
         eoa = await self.get_eoa(evm_address)
-        try:
-            block_number = int(block_number, 16)
-        except ValueError:
-            pass
         block_hash = (
-            await self.starknet_gateway.get_block(block_number=block_number)
+            await self.starknet_gateway.get_block(
+                block_number=self.get_block_number(block_number)
+            )
         ).block_hash
         nonce = await self.starknet_gateway.get_contract_nonce(
             eoa.address, block_hash=block_hash
@@ -171,8 +175,9 @@ class EthClient:
         tx = HexBytes(raw_tx)
         is_legacy = self.is_legacy_tx(tx)
         if is_legacy:
-            raise ValueError("Cannot decode legacy tx")
-        sender = LondonTypedTransaction.decode(tx).get_sender().hex()
+            sender = LondonLegacyTransaction.decode(tx).get_sender().hex()
+        else:
+            sender = LondonTypedTransaction.decode(tx).get_sender().hex()
         eoa = await self.get_eoa(f"0x{sender}")
         call = Call(
             to_addr=0xDEAD,
@@ -189,20 +194,23 @@ class EthClient:
         else:
             block_hash = (
                 await self.starknet_gateway.get_block(
-                    block_number=int(block_number, 16)
+                    block_number=self.get_block_number(block_number)
                 )
             ).block_hash
-            return "".join(
-                (
-                    await self.kakarot_contract.functions["execute_at_address"]
-                    .prepare(
-                        int(tx["to"], 16),
-                        int(tx.get("value", "0x0"), 16),
-                        int(tx["gas"], 16),
-                        HexBytes(tx["data"]),
-                    )
-                    .call(block_hash=hex(block_hash))
-                ).as_tuple()
+            return (
+                "0x"
+                + bytes(
+                    (
+                        await self.kakarot_contract.functions["execute_at_address"]
+                        .prepare(
+                            int(tx["to"], 16),
+                            int(tx.get("value", "0x0"), 16),
+                            int(tx["gas"], 16),
+                            HexBytes(tx["data"]),
+                        )
+                        .call(block_hash=hex(block_hash))
+                    ).return_data
+                ).hex()
             )
 
     async def eth_estimateGas(self, tx) -> str:
@@ -213,13 +221,12 @@ class EthClient:
         return self.starknet_block_to_eth_block(block, transactions)
 
     async def eth_getBlockByNumber(self, block_number: str, transactions: bool) -> dict:
-        if not (block_number == "latest" or block_number == "pending"):
-            block_number = int(block_number, 16)
-        block = await self.starknet_gateway.get_block(block_number=block_number)
+        block = await self.starknet_gateway.get_block(
+            block_number=self.get_block_number(block_number)
+        )
         return self.starknet_block_to_eth_block(block, transactions)
 
     async def eth_getTransactionReceipt(self, tx_hash):
-        receipt = await self.starknet_gateway.get_transaction_receipt(tx_hash)
         try:
             tx = await self.starknet_gateway.get_transaction(tx_hash)
             call = Call(
@@ -228,8 +235,9 @@ class EthClient:
                 calldata=[],
             )
             sender = hex((await self.starknet_gateway.call_contract(call))[0])
-        except TransactionNotReceivedError:
+        except:
             return
+        receipt = await self.starknet_gateway.get_transaction_receipt(tx_hash)
         return {
             "transactionHash": tx_hash,
             "blockHash": hex(receipt.block_hash or 0),
@@ -259,20 +267,31 @@ class EthClient:
     async def eth_getCode(self, evm_address, block_number):
         starknet_address = await self.compute_starknet_address(evm_address)
         try:
-            return await self.starknet_gateway.get_code(
-                starknet_address, block_number=self.get_block_number(block_number)
+            call = Call(
+                to_addr=starknet_address,
+                selector=get_selector_from_name("bytecode"),
+                calldata=[],
             )
-        except ContractNotFoundError:
-            return "0x0"
+            bytecode = await self.starknet_gateway.call_contract(
+                call, block_number=self.get_block_number(block_number)
+            )
+            return "0x" + bytes(bytecode[1:]).hex()
+        except:
+            return "0x"
 
     async def eth_getTransactionByHash(self, tx_hash):
-        tx = await self.starknet_gateway.get_transaction(tx_hash)
-        call = Call(
-            to_addr=tx.contract_address,
-            selector=get_selector_from_name("get_evm_address"),
-            calldata=[],
-        )
-        sender = hex((await self.starknet_gateway.call_contract(call))[0])
+
+        try:
+            tx = await self.starknet_gateway.get_transaction(tx_hash)
+            call = Call(
+                to_addr=tx.contract_address,
+                selector=get_selector_from_name("get_evm_address"),
+                calldata=[],
+            )
+            sender = hex((await self.starknet_gateway.call_contract(call))[0])
+        except:
+            return
+
         receipt = await self.starknet_gateway.get_transaction_receipt(tx_hash)
         return {
             "blockHash": hex(receipt.block_hash or 0),
