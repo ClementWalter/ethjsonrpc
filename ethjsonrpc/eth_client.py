@@ -42,10 +42,10 @@ class EthClient:
 
     @staticmethod
     async def new(starknet_gateway_url: str):
-        client = GatewayClient(net=starknet_gateway_url)
-        eth_contract = await get_eth_contract(client)
-        kakarot_contract = await get_kakarot_contract(client)
-        return EthClient(client, eth_contract, kakarot_contract)
+        starknet_gateway = GatewayClient(net=starknet_gateway_url)
+        eth_contract = await get_eth_contract(starknet_gateway)
+        kakarot_contract = await get_kakarot_contract(starknet_gateway)
+        return EthClient(starknet_gateway, eth_contract, kakarot_contract)
 
     async def compute_starknet_address(self, evm_address: str):
         return (
@@ -180,19 +180,13 @@ class EthClient:
         else:
             decoded_tx = LondonTypedTransaction.decode(tx)
         sender = decoded_tx.get_sender().hex()
-        try:
-            # TODO: remove when kakarot allows for sending ETH to an non-deployed EOA
-            to = decoded_tx.to.hex()
-            await self.get_eoa(to)
-        except:
-            pass
         eoa = await self.get_eoa(sender)
         call = Call(
             to_addr=0xDEAD,
             selector=0xDEAD,
             calldata=list(tx),
         )
-        receipt = await eoa.execute(call, max_fee=int(1e18))
+        receipt = await eoa.execute(call, max_fee=int(1e20))
         receipt = await self.starknet_gateway.get_transaction_receipt(
             receipt.transaction_hash
         )
@@ -203,30 +197,27 @@ class EthClient:
         return f"0x{receipt.hash:064x}"
 
     async def eth_call(self, tx, block_number) -> str:
-        if "to" not in tx:
-            # Currently not possible to call for a deploy tx
-            return hex(int(1e18))
-        else:
-            block_hash = (
-                await self.starknet_gateway.get_block(
-                    block_number=self.get_block_number(block_number)
-                )
-            ).block_hash
-            return (
-                "0x"
-                + bytes(
-                    (
-                        await self.kakarot_contract.functions["execute_at_address"]
-                        .prepare(
-                            int(tx["to"], 16),
-                            int(tx.get("value", "0x0"), 16),
-                            int(tx["gas"], 16),
-                            HexBytes(tx["data"]),
-                        )
-                        .call(block_hash=hex(block_hash))
-                    ).return_data
-                ).hex()
+        block_hash = (
+            await self.starknet_gateway.get_block(
+                block_number=self.get_block_number(block_number)
             )
+        ).block_hash
+        return (
+            "0x"
+            + bytes(
+                (
+                    await self.kakarot_contract.functions["eth_call"]
+                    .prepare(
+                        to=int(tx.get("to", "0x0"), 16),
+                        gas_limit=int(tx.get("gas_limit", "0x0"), 16),
+                        gas_price=int(tx.get("gas_price", "0x0"), 16),
+                        value=int(tx.get("value", "0x0"), 16),
+                        data=HexBytes(tx["data"]),
+                    )
+                    .call(block_hash=hex(block_hash))
+                ).return_data
+            ).hex()
+        )
 
     async def eth_estimateGas(self, tx) -> str:
         return hex(21_000)
@@ -252,11 +243,22 @@ class EthClient:
         else:
             decoded_tx = LondonTypedTransaction.decode(tx)
         receipt = await self.starknet_gateway.get_transaction_receipt(tx_hash)
+        contract_address = (
+            hex(
+                [
+                    e
+                    for e in receipt.events
+                    if e.from_address == int(KAKAROT_ADDRESS, 16)
+                ][0].data[0]
+            )
+            if not decoded_tx.to
+            else None
+        )
         return {
             "transactionHash": tx_hash,
             "blockHash": hex(receipt.block_hash or 0),
             "blockNumber": hex(receipt.block_number or 0),
-            "contractAddress": None,
+            "contractAddress": contract_address,
             "effectiveGasPrice": receipt.actual_fee,
             "cumulativeGasUsed": hex(21_000),
             "from": "0x" + decoded_tx.get_sender().hex(),
@@ -323,3 +325,16 @@ class EthClient:
             "r": "0x1b5e176d927f8e9ab405058b2d2457392da3e20f328b16ddabcebc33eaac5fea",
             "s": "0x4ba69724e8f69de52f0125ad8b3c5c2cef33019bac3249e2c0a2192766d1721c",
         }
+
+    async def web3_clientVersion(self):
+        return "Kakarot/v0.1.0"
+
+    async def eth_signTransaction(self, tx):
+        raise ValueError("No accounts managed by node")
+
+    async def eth_sendTransaction(self, tx):
+        signed_tx = await self.eth_signTransaction(tx)
+        return self.eth_sendRawTransaction(signed_tx)
+
+    async def eth_accounts(self) -> list:
+        return []

@@ -2,6 +2,7 @@ import json
 import logging
 from typing import List, Optional, Union
 
+import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware import Middleware
@@ -83,6 +84,17 @@ class Result(BaseModel):
     result: Optional[Union[dict, List[str], str, int]]
 
 
+class MintRequest(BaseModel):
+    address: str
+    amount: int
+
+
+class MintResponse(BaseModel):
+    new_balance: int
+    tx_hash: str
+    unit: str
+
+
 @app.post("/")
 async def main(payload: Payload) -> Result:
     if not hasattr(eth_client, payload.method):
@@ -92,6 +104,16 @@ async def main(payload: Payload) -> Result:
         jsonrpc=payload.jsonrpc,
         result=await getattr(eth_client, payload.method)(*(payload.params or [])),
     )
+
+
+@app.post("/mint")
+async def mint(payload: MintRequest) -> MintResponse:
+    starknet_address = await eth_client.compute_starknet_address(payload.address)
+    response = requests.post(
+        f"{eth_client.starknet_gateway.net}/mint",
+        json={"address": hex(starknet_address), "amount": payload.amount},
+    )
+    return MintResponse(**response.json())
 
 
 @app.options("/")

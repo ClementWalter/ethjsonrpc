@@ -8,6 +8,7 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
+from starknet_py.net.gateway_client import GatewayClient
 
 load_dotenv()
 
@@ -41,6 +42,7 @@ GATEWAY_URLS = {
     "devnet": "http://127.0.0.1:5050",
 }
 GATEWAY_URL = GATEWAY_URLS[STARKNET_NETWORK]
+GATEWAY_CLIENT = GatewayClient(net=GATEWAY_URL)
 STARKNET_CHAIN_ID = getattr(StarknetChainId, STARKNET_NETWORK)
 
 ACCOUNT_ADDRESS = (

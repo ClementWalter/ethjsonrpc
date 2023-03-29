@@ -14,6 +14,7 @@ from starkware.starknet.public.abi import get_selector_from_name
 from ethjsonrpc.constants import (
     ACCOUNT_ADDRESS,
     ETH_TOKEN_ADDRESS,
+    GATEWAY_CLIENT,
     GATEWAY_URL,
     KAKAROT_ADDRESS,
     PRIVATE_KEY,
@@ -23,7 +24,7 @@ from ethjsonrpc.constants import (
 )
 
 
-async def get_eth_contract(client) -> Contract:
+async def get_eth_contract(client=GATEWAY_CLIENT) -> Contract:
     class EthProxyCheck(ProxyCheck):
         """
         See https://github.com/software-mansion/starknet.py/issues/856
@@ -59,7 +60,7 @@ async def get_eth_contract(client) -> Contract:
     )
 
 
-async def get_kakarot_contract(client) -> Contract:
+async def get_kakarot_contract(client=GATEWAY_CLIENT) -> Contract:
     return await Contract.from_address(KAKAROT_ADDRESS, client)
 
 
